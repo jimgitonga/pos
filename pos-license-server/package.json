@@ -1,0 +1,27 @@
+{
+  "name": "pos-license-server-sqlite",
+  "version": "1.0.0",
+  "description": "Simple SQLite-based license server for POS system",
+  "main": "license-server-sqlite.js",
+  "scripts": {
+    "start": "node license-server-sqlite.js",
+    "dev": "nodemon license-server-sqlite.js",
+    "cli": "node license-manager.js",
+    "quick": "node license-manager.js quick",
+    "test": "node test-server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "sqlite3": "^5.1.6",
+    "cors": "^2.8.5",
+    "uuid": "^9.0.0",
+    "express-rate-limit": "^6.7.0",
+    "axios": "^1.4.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  },
+  "keywords": ["license", "server", "pos", "sqlite"],
+  "author": "Your Name",
+  "license": "MIT"
+}
