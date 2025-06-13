@@ -1,0 +1,129 @@
+{
+  "name": "modern-pos-system",
+  "version": "1.0.0",
+  "description": "A comprehensive Point of Sale system built with Electron and React",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "concurrently \"npm run dev:react\" \"wait-on http://localhost:3000 && electron . --dev\"",
+    "dev:react": "webpack serve --config webpack.dev.config.js",
+    "build": "webpack --mode production && electron-builder",
+    "build:react": "webpack --mode production",
+    "dist": "npm run build:react && electron-builder",
+    "dist:win": "npm run build:react && electron-builder --win",
+    "dist:mac": "npm run build:react && electron-builder --mac",
+    "dist:linux": "npm run build:react && electron-builder --linux",
+    "postinstall": "electron-builder install-app-deps",
+    "rebuild": "electron-rebuild -f -w better-sqlite3"
+  },
+  "keywords": [
+    "pos",
+    "point-of-sale",
+    "retail",
+    "electron",
+    "react",
+    "sqlite"
+  ],
+  "author": "Your Company",
+  "license": "MIT",
+  "homepage": "./",
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "better-sqlite3": "^9.2.2",
+    "electron-is-dev": "^2.0.0",
+    "electron-pos-printer": "^1.3.0",
+    "electron-updater": "^6.1.7",
+    "electron-rebuild": "^3.2.9",
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.303.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hook-form": "^7.48.2",
+    "react-router-dom": "^6.21.1",
+    "recharts": "^2.10.3",
+    "zustand": "^4.4.7",
+    "@hookform/resolvers": "^3.3.4",
+    "zod": "^3.22.4",
+    "date-fns": "^3.0.6",
+    "@tanstack/react-table": "^8.11.2",
+    "react-hot-toast": "^2.4.1",
+    "xlsx": "^0.18.5",
+    "csv-parse": "^5.5.3",
+    "qrcode": "^1.5.3",
+    "react-barcode-reader": "^0.0.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
+    "autoprefixer": "^10.4.16",
+    "concurrently": "^8.2.2",
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1",
+    "electron-reload": "^2.0.0-alpha.1",
+    "postcss": "^8.4.32",
+    "react-scripts": "^5.0.1",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.3",
+    "wait-on": "^7.2.0",
+        "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  },
+  "build": {
+    "appId": "com.yourcompany.pos",
+    "productName": "Modern POS",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/main/**/*",
+      "src/shared/**/*",
+      "build/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets",
+        "filter": ["**/*"]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.business",
+      "icon": "assets/icon.icns"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Office",
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app"
+    ]
+  }
+}
