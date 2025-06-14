@@ -154,6 +154,13 @@ customers: {
     getByEntity: (entityType, entityId) => ipcRenderer.invoke('logs:getByEntity', { entityType, entityId }),
     search: (query) => ipcRenderer.invoke('logs:search', query)
   },
+// license
+    license: {
+    activate: (licenseKey) => ipcRenderer.invoke('license:activate', licenseKey),
+    info: () => ipcRenderer.invoke('license:info'),
+    validate: () => ipcRenderer.invoke('license:validate'),
+    deactivate: () => ipcRenderer.invoke('license:deactivate')
+  },
 
   // File operations
   file: {

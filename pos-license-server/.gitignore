@@ -1,9 +1,0 @@
-node_modules/
-data/
-*.db
-*.log
-.env
-licenses_export_*.csv
-batch_licenses_*.csv
-license_*.txt
-.DS_Store

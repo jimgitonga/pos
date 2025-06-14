@@ -1,7 +1,11 @@
+
+
+// src/main/index.js - Fixed version
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const isDev = require('electron-is-dev');
 const { autoUpdater } = require('electron-updater');
+const LicenseManager = require('./licensing/licenseManager');
 
 // Import database and IPC handlers
 const { initDatabase } = require('./database/init');
@@ -12,9 +16,15 @@ const { setupInventoryHandlers } = require('./ipc/inventory');
 const { setupCustomerHandlers } = require('./ipc/customers');
 const { setupReportsHandlers } = require('./ipc/reports');
 const { setupSettingsHandlers } = require('./ipc/settings');
-const {setupCategoryHandlers}=require('./ipc/categories');
+const { setupCategoryHandlers } = require('./ipc/categories');
+
 let mainWindow;
 let db;
+let licenseManager;
+
+// Initialize license manager with your actual server
+const LICENSE_SERVER_URL = 'https://licensemanager-mdkj.onrender.com';
+licenseManager = new LicenseManager(LICENSE_SERVER_URL);
 
 // Enable live reload for Electron in development
 if (isDev) {
@@ -37,7 +47,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js')
     },
     icon: path.join(__dirname, '../assets/icon.png'),
-    frame: false, // Custom title bar
+    frame: false,
     backgroundColor: '#1a1a1a',
     show: false
   });
@@ -62,8 +72,8 @@ function createWindow() {
   });
 }
 
-// App event handlers
-app.whenReady().then(async () => {
+// Initialize the main application
+async function initializeApp() {
   try {
     // Initialize database
     db = await initDatabase();
@@ -76,7 +86,25 @@ app.whenReady().then(async () => {
     setupCustomerHandlers(ipcMain, db);
     setupReportsHandlers(ipcMain, db);
     setupSettingsHandlers(ipcMain, db);
-    setupCategoryHandlers(ipcMain,db);
+    setupCategoryHandlers(ipcMain, db);
+    
+    // License IPC handlers
+    ipcMain.handle('license:info', async () => {
+      return licenseManager.getStoredLicense();
+    });
+    
+    ipcMain.handle('license:activate', async (event, licenseKey) => {
+      return await licenseManager.validateLicense(licenseKey);
+    });
+    
+    ipcMain.handle('license:validate', async () => {
+      return await licenseManager.checkLicense();
+    });
+    
+    ipcMain.handle('license:deactivate', async () => {
+      licenseManager.store.clear();
+      return { success: true };
+    });
     
     // Window controls
     ipcMain.handle('window:minimize', () => {
@@ -106,9 +134,20 @@ app.whenReady().then(async () => {
     dialog.showErrorBox('Initialization Error', 'Failed to start the application. Please try again.');
     app.quit();
   }
+}
+
+// App event handlers
+app.whenReady().then(() => {
+  // Just initialize the app - App.jsx will handle license checking
+  initializeApp();
 });
 
 app.on('window-all-closed', () => {
+  // Clean up license manager
+  if (licenseManager) {
+    licenseManager.destroy();
+  }
+  
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -155,4 +194,25 @@ if (!gotTheLock) {
       mainWindow.focus();
     }
   });
+}
+
+// Anti-debugging protection (production only)
+if (!isDev) {
+  // Disable DevTools
+  app.on('web-contents-created', (event, contents) => {
+    contents.on('devtools-opened', () => {
+      contents.closeDevTools();
+      dialog.showErrorBox(
+        'Security Warning',
+        'Developer tools are disabled in production mode.'
+      );
+    });
+  });
+  
+  // Prevent debugging
+  setInterval(() => {
+    if (global.v8debug || global.debug) {
+      licenseManager.forceShutdown('Debugging detected');
+    }
+  }, 1000);
 }
