@@ -73,7 +73,7 @@ function setupCategoryHandlers(ipcMain, db) {
         FROM products
         WHERE category_id = ?
         ORDER BY name ASC
-        LIMIT 10
+        LIMIT 1000
       `).all(id);
       
       return { success: true, category };

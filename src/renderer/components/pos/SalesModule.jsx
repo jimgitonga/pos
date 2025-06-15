@@ -1,3 +1,4 @@
+
 // // src/renderer/components/pos/SalesModule.jsx
 // import React, { useState, useEffect, useRef } from 'react';
 // import {
@@ -102,12 +103,20 @@
 //     setShowCheckout(true);
 //   };
 
-//   const QuickProducts = () => {
-//     const quickProducts = products.filter(p => p.is_active).slice(0, 12);
+//   // Modified QuickProducts component to accept props
+//   const QuickProducts = ({ products, selectedCategory, handleAddProduct }) => {
+//     // Filter products based on selectedCategory
+//     const filteredProducts = products.filter(p => 
+//       p.is_active && 
+//       (selectedCategory === null || p.category_id === selectedCategory)
+//     );
+    
+//     // Slice for display, perhaps you want more than 12 if filtering reduces the count
+//     const productsToDisplay = filteredProducts.slice(0, 12); 
 
 //     return (
 //       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-//         {quickProducts.map((product) => (
+//         {productsToDisplay.map((product) => (
 //           <button
 //             key={product.id}
 //             onClick={() => handleAddProduct(product)}
@@ -212,8 +221,12 @@
 //           </div>
 //         </div>
 
-//         {/* Quick Products Grid */}
-//         <QuickProducts />
+//         {/* Quick Products Grid - Now passing props */}
+//         <QuickProducts 
+//           products={products} 
+//           selectedCategory={selectedCategory} 
+//           handleAddProduct={handleAddProduct} 
+//         />
 //       </div>
 
 //       {/* Shopping Cart Sidebar */}
@@ -847,8 +860,6 @@
 //   );
 // }
 
-
-
 // src/renderer/components/pos/SalesModule.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -960,13 +971,10 @@ export default function SalesModule() {
       p.is_active && 
       (selectedCategory === null || p.category_id === selectedCategory)
     );
-    
-    // Slice for display, perhaps you want more than 12 if filtering reduces the count
-    const productsToDisplay = filteredProducts.slice(0, 12); 
 
     return (
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-        {productsToDisplay.map((product) => (
+        {filteredProducts.map((product) => (
           <button
             key={product.id}
             onClick={() => handleAddProduct(product)}
@@ -992,96 +1000,102 @@ export default function SalesModule() {
   };
 
   return (
-    <div className="flex h-full">
-      {/* Main Content */}
-      <div className="flex-1 p-6">
-        {/* Search Bar */}
-        <div className="mb-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter' && searchQuery) {
-                  handleBarcodeScan(searchQuery);
-                }
-              }}
-              placeholder="Search products by name, SKU, or scan barcode..."
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
-            />
-            {searching && (
-              <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 animate-spin" />
+    <div className="flex h-screen">
+      {/* Main Content - Fixed height with internal scrolling */}
+      <div className="flex-1 flex flex-col h-full">
+        {/* Header section - Fixed */}
+        <div className="p-6 pb-0 flex-shrink-0">
+          {/* Search Bar */}
+          <div className="mb-6">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && searchQuery) {
+                    handleBarcodeScan(searchQuery);
+                  }
+                }}
+                placeholder="Search products by name, SKU, or scan barcode..."
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+              />
+              {searching && (
+                <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 animate-spin" />
+              )}
+            </div>
+
+            {/* Search Results Dropdown */}
+            {searchResults.length > 0 && (
+              <div className="absolute z-10 w-full mt-2 bg-gray-800 border border-gray-700 rounded-lg shadow-lg max-h-96 overflow-y-auto">
+                {searchResults.map((product) => (
+                  <button
+                    key={product.id}
+                    onClick={() => handleAddProduct(product)}
+                    className="w-full px-4 py-3 hover:bg-gray-700 flex items-center justify-between text-left"
+                  >
+                    <div>
+                      <p className="text-white font-medium">{product.name}</p>
+                      <p className="text-gray-400 text-sm">SKU: {product.sku} | {product.category_name}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-blue-400 font-bold">KES {product.unit_price.toLocaleString()}</p>
+                      {product.track_inventory && (
+                        <p className="text-gray-500 text-sm">Stock: {product.current_stock}</p>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
 
-          {/* Search Results Dropdown */}
-          {searchResults.length > 0 && (
-            <div className="absolute z-10 w-full mt-2 bg-gray-800 border border-gray-700 rounded-lg shadow-lg max-h-96 overflow-y-auto">
-              {searchResults.map((product) => (
-                <button
-                  key={product.id}
-                  onClick={() => handleAddProduct(product)}
-                  className="w-full px-4 py-3 hover:bg-gray-700 flex items-center justify-between text-left"
-                >
-                  <div>
-                    <p className="text-white font-medium">{product.name}</p>
-                    <p className="text-gray-400 text-sm">SKU: {product.sku} | {product.category_name}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-blue-400 font-bold">KES {product.unit_price.toLocaleString()}</p>
-                    {product.track_inventory && (
-                      <p className="text-gray-500 text-sm">Stock: {product.current_stock}</p>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Categories */}
-        <div className="mb-6">
-          <div className="flex gap-2 overflow-x-auto pb-2">
-            <button
-              onClick={() => setSelectedCategory(null)}
-              className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
-                selectedCategory === null
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-              }`}
-            >
-              All Products
-            </button>
-            {categories.map((category) => (
+          {/* Categories */}
+          <div className="mb-6">
+            <div className="flex gap-2 overflow-x-auto pb-2">
               <button
-                key={category.id}
-                onClick={() => setSelectedCategory(category.id)}
+                onClick={() => setSelectedCategory(null)}
                 className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
-                  selectedCategory === category.id
+                  selectedCategory === null
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
                 }`}
               >
-                {category.name}
+                All Products
               </button>
-            ))}
+              {categories.map((category) => (
+                <button
+                  key={category.id}
+                  onClick={() => setSelectedCategory(category.id)}
+                  className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
+                    selectedCategory === category.id
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                  }`}
+                >
+                  {category.name}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Quick Products Grid - Now passing props */}
-        <QuickProducts 
-          products={products} 
-          selectedCategory={selectedCategory} 
-          handleAddProduct={handleAddProduct} 
-        />
+        {/* Products Grid - Scrollable */}
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
+          <QuickProducts 
+            products={products} 
+            selectedCategory={selectedCategory} 
+            handleAddProduct={handleAddProduct} 
+          />
+        </div>
       </div>
 
-      {/* Shopping Cart Sidebar */}
-      <div className="w-96 bg-gray-800 border-l border-gray-700 flex flex-col">
-        <div className="p-4 border-b border-gray-700">
+      {/* Shopping Cart Sidebar - Fixed height with proper sections */}
+      <div className="w-96 bg-gray-800 border-l border-gray-700 flex flex-col h-full">
+        {/* Cart Header - Fixed */}
+        <div className="p-4 border-b border-gray-700 flex-shrink-0">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <ShoppingCart className="w-5 h-5" />
@@ -1098,9 +1112,9 @@ export default function SalesModule() {
           </div>
         </div>
 
-        {/* Customer Info */}
+        {/* Customer Info - Fixed */}
         {customer ? (
-          <div className="p-4 bg-gray-700/50 border-b border-gray-700">
+          <div className="p-4 bg-gray-700/50 border-b border-gray-700 flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-white font-medium">{customer.first_name} {customer.last_name}</p>
@@ -1115,17 +1129,19 @@ export default function SalesModule() {
             </div>
           </div>
         ) : (
-          <button
-            onClick={() => setShowCustomerSearch(true)}
-            className="m-4 p-3 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center gap-2 text-gray-300"
-          >
-            <User className="w-4 h-4" />
-            Add Customer
-          </button>
+          <div className="p-4 flex-shrink-0">
+            <button
+              onClick={() => setShowCustomerSearch(true)}
+              className="w-full p-3 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center gap-2 text-gray-300"
+            >
+              <User className="w-4 h-4" />
+              Add Customer
+            </button>
+          </div>
         )}
 
-        {/* Cart Items */}
-        <div className="flex-1 overflow-y-auto p-4">
+        {/* Cart Items - Scrollable */}
+        <div className="flex-1 overflow-y-auto p-4 min-h-0">
           {items.length === 0 ? (
             <div className="text-center py-8">
               <ShoppingCart className="w-16 h-16 text-gray-600 mx-auto mb-4" />
@@ -1149,24 +1165,26 @@ export default function SalesModule() {
                     </button>
                   </div>
                   <div className="flex items-center justify-between">
-                    <button
-                      onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                      className="bg-gray-600 hover:bg-gray-500 w-8 h-8 rounded flex items-center justify-center text-white"
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                    <span className="text-white w-8 text-center">{item.quantity}</span>
-                    <button
-                      onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                      className="bg-gray-600 hover:bg-gray-500 w-8 h-8 rounded flex items-center justify-center text-white"
-                      disabled={item.track_inventory && item.quantity >= item.current_stock}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        className="bg-gray-600 hover:bg-gray-500 w-8 h-8 rounded flex items-center justify-center text-white"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <span className="text-white w-8 text-center">{item.quantity}</span>
+                      <button
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        className="bg-gray-600 hover:bg-gray-500 w-8 h-8 rounded flex items-center justify-center text-white"
+                        disabled={item.track_inventory && item.quantity >= item.current_stock}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <span className="text-blue-400 font-medium">
+                      KES {(item.unit_price * item.quantity).toLocaleString()}
+                    </span>
                   </div>
-                  <span className="text-blue-400 font-medium">
-                    KES {(item.unit_price * item.quantity).toLocaleString()}
-                  </span>
                   {item.track_inventory && item.quantity >= item.current_stock && (
                     <p className="text-red-400 text-xs mt-2 flex items-center gap-1">
                       <AlertCircle className="w-3 h-3" />
@@ -1179,8 +1197,8 @@ export default function SalesModule() {
           )}
         </div>
 
-        {/* Cart Summary */}
-        <div className="p-4 border-t border-gray-700 space-y-3">
+        {/* Cart Summary - Fixed at bottom */}
+        <div className="p-4 border-t border-gray-700 space-y-3 flex-shrink-0 bg-gray-800">
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">Subtotal</span>
@@ -1607,17 +1625,7 @@ function CheckoutModal({ onClose, onComplete }) {
 }
 
 
-
-
-
-
 // Customer Search Modal Component
-
-
-
-
-
-
 function CustomerSearchModal({ onSelect, onClose }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [customers, setCustomers] = useState([]);
