@@ -293,6 +293,245 @@ db.exec(`
     FOREIGN KEY (sent_by) REFERENCES users(id)
   );
 `);
+db.exec(`
+  -- Add this to your existing database init script (init.js)
+
+-- Invoices table
+CREATE TABLE IF NOT EXISTS invoices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  invoice_number TEXT UNIQUE NOT NULL,
+  customer_id INTEGER,
+  customer_name TEXT NOT NULL,
+  customer_email TEXT,
+  customer_phone TEXT,
+  customer_address TEXT,
+  invoice_date DATE NOT NULL,
+  due_date DATE,
+  payment_terms TEXT DEFAULT '30',
+  subtotal DECIMAL(10,2) NOT NULL DEFAULT 0,
+  tax_rate DECIMAL(5,2) DEFAULT 16,
+  tax_amount DECIMAL(10,2) DEFAULT 0,
+  discount_amount DECIMAL(10,2) DEFAULT 0,
+  total_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+  status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'pending', 'paid', 'overdue', 'cancelled')),
+  notes TEXT,
+  terms_conditions TEXT,
+  user_id INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (customer_id) REFERENCES customers(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Invoice items table
+CREATE TABLE IF NOT EXISTS invoice_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  invoice_id INTEGER NOT NULL,
+  product_id INTEGER,
+  description TEXT NOT NULL,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  total_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES products(id)
+);
+
+-- Invoice payments table (for partial payments)
+CREATE TABLE IF NOT EXISTS invoice_payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  invoice_id INTEGER NOT NULL,
+  payment_amount DECIMAL(10,2) NOT NULL,
+  payment_method TEXT NOT NULL CHECK(payment_method IN ('cash', 'card', 'mpesa', 'bank_transfer', 'check', 'other')),
+  payment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+  reference_number TEXT,
+  notes TEXT,
+  user_id INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Invoice email logs table
+CREATE TABLE IF NOT EXISTS invoice_email_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  invoice_id INTEGER NOT NULL,
+  recipient_email TEXT NOT NULL,
+  subject TEXT,
+  sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  status TEXT DEFAULT 'sent' CHECK(status IN ('sent', 'failed', 'bounced')),
+  error_message TEXT,
+  user_id INTEGER NOT NULL,
+  FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Invoice recurring templates table (for recurring invoices)
+CREATE TABLE IF NOT EXISTS invoice_templates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  template_name TEXT NOT NULL,
+  customer_id INTEGER,
+  customer_name TEXT NOT NULL,
+  customer_email TEXT,
+  customer_phone TEXT,
+  customer_address TEXT,
+  payment_terms TEXT DEFAULT '30',
+  tax_rate DECIMAL(5,2) DEFAULT 16,
+  discount_amount DECIMAL(10,2) DEFAULT 0,
+  notes TEXT,
+  terms_conditions TEXT,
+  recurrence_pattern TEXT CHECK(recurrence_pattern IN ('monthly', 'quarterly', 'semi-annually', 'annually')),
+  next_invoice_date DATE,
+  is_active INTEGER DEFAULT 1,
+  user_id INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (customer_id) REFERENCES customers(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Invoice template items table
+CREATE TABLE IF NOT EXISTS invoice_template_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  template_id INTEGER NOT NULL,
+  product_id INTEGER,
+  description TEXT NOT NULL,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  FOREIGN KEY (template_id) REFERENCES invoice_templates(id) ON DELETE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES products(id)
+);
+
+-- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_invoices_number ON invoices(invoice_number);
+CREATE INDEX IF NOT EXISTS idx_invoices_customer ON invoices(customer_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_date ON invoices(invoice_date);
+CREATE INDEX IF NOT EXISTS idx_invoices_due_date ON invoices(due_date);
+CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice ON invoice_items(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_items_product ON invoice_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_payments_invoice ON invoice_payments(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_payments_date ON invoice_payments(payment_date);
+
+-- Triggers for automatic calculations and updates
+
+-- Trigger to update invoice totals when items change
+CREATE TRIGGER IF NOT EXISTS update_invoice_totals_on_item_change
+AFTER INSERT ON invoice_items
+BEGIN
+  UPDATE invoices 
+  SET 
+    subtotal = (
+      SELECT COALESCE(SUM(total_price), 0) 
+      FROM invoice_items 
+      WHERE invoice_id = NEW.invoice_id
+    ),
+    tax_amount = (
+      SELECT COALESCE(SUM(total_price), 0) * tax_rate / 100
+      FROM invoice_items 
+      WHERE invoice_id = NEW.invoice_id
+    ),
+    total_amount = (
+      SELECT 
+        COALESCE(SUM(total_price), 0) + 
+        (COALESCE(SUM(total_price), 0) * tax_rate / 100) - 
+        discount_amount
+      FROM invoice_items 
+      WHERE invoice_id = NEW.invoice_id
+    ),
+    updated_at = CURRENT_TIMESTAMP
+  WHERE id = NEW.invoice_id;
+END;
+
+-- Trigger to update invoice totals when items are updated
+CREATE TRIGGER IF NOT EXISTS update_invoice_totals_on_item_update
+AFTER UPDATE ON invoice_items
+BEGIN
+  UPDATE invoices 
+  SET 
+    subtotal = (
+      SELECT COALESCE(SUM(total_price), 0) 
+      FROM invoice_items 
+      WHERE invoice_id = NEW.invoice_id
+    ),
+    tax_amount = (
+      SELECT COALESCE(SUM(total_price), 0) * tax_rate / 100
+      FROM invoice_items 
+      WHERE invoice_id = NEW.invoice_id
+    ),
+    total_amount = (
+      SELECT 
+        COALESCE(SUM(total_price), 0) + 
+        (COALESCE(SUM(total_price), 0) * tax_rate / 100) - 
+        discount_amount
+      FROM invoice_items 
+      WHERE invoice_id = NEW.invoice_id
+    ),
+    updated_at = CURRENT_TIMESTAMP
+  WHERE id = NEW.invoice_id;
+END;
+
+-- Trigger to update invoice totals when items are deleted
+CREATE TRIGGER IF NOT EXISTS update_invoice_totals_on_item_delete
+AFTER DELETE ON invoice_items
+BEGIN
+  UPDATE invoices 
+  SET 
+    subtotal = (
+      SELECT COALESCE(SUM(total_price), 0) 
+      FROM invoice_items 
+      WHERE invoice_id = OLD.invoice_id
+    ),
+    tax_amount = (
+      SELECT COALESCE(SUM(total_price), 0) * tax_rate / 100
+      FROM invoice_items 
+      WHERE invoice_id = OLD.invoice_id
+    ),
+    total_amount = (
+      SELECT 
+        COALESCE(SUM(total_price), 0) + 
+        (COALESCE(SUM(total_price), 0) * tax_rate / 100) - 
+        discount_amount
+      FROM invoice_items 
+      WHERE invoice_id = OLD.invoice_id
+    ),
+    updated_at = CURRENT_TIMESTAMP
+  WHERE id = OLD.invoice_id;
+END;
+
+-- Trigger to automatically update invoice status based on due date
+CREATE TRIGGER IF NOT EXISTS auto_update_overdue_status
+AFTER UPDATE OF due_date ON invoices
+WHEN NEW.due_date < date('now') AND NEW.status = 'pending'
+BEGIN
+  UPDATE invoices 
+  SET status = 'overdue', updated_at = CURRENT_TIMESTAMP
+  WHERE id = NEW.id;
+END;
+
+-- View for invoice summaries with calculated fields
+CREATE VIEW IF NOT EXISTS invoice_summary AS
+SELECT 
+  i.*,
+  c.first_name || ' ' || c.last_name as full_customer_name,
+  c.email as customer_email_from_customer,
+  c.phone as customer_phone_from_customer,
+  (SELECT COUNT(*) FROM invoice_items WHERE invoice_id = i.id) as item_count,
+  (SELECT COALESCE(SUM(payment_amount), 0) FROM invoice_payments WHERE invoice_id = i.id) as total_paid,
+  (i.total_amount - COALESCE((SELECT SUM(payment_amount) FROM invoice_payments WHERE invoice_id = i.id), 0)) as balance_due,
+  CASE 
+    WHEN i.due_date IS NULL THEN 'No due date'
+    WHEN i.due_date < date('now') AND i.status = 'pending' THEN 'Overdue'
+    WHEN i.due_date = date('now') AND i.status = 'pending' THEN 'Due today'
+    WHEN i.due_date > date('now') AND i.status = 'pending' THEN 'Upcoming'
+    ELSE i.status
+  END as payment_status_display,
+  julianday(i.due_date) - julianday('now') as days_until_due
+FROM invoices i
+LEFT JOIN customers c ON i.customer_id = c.id;
+
+  
+  `)
   // Insert default settings
   const insertSetting = db.prepare(`
     INSERT OR IGNORE INTO settings (key, value, description) 

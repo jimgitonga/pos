@@ -50,7 +50,7 @@ categories: {
     getStats: () => ipcRenderer.invoke('categories:getStats')
   },
 
-  // Sales
+// Sales
   sales: {
     create: (sale) => ipcRenderer.invoke('sales:create', sale),
     getById: (id) => ipcRenderer.invoke('sales:getById', id),
@@ -58,7 +58,12 @@ categories: {
     getByDateRange: (startDate, endDate) => ipcRenderer.invoke('sales:getByDateRange', { startDate, endDate }),
     void: (id, reason) => ipcRenderer.invoke('sales:void', { id, reason }),
     return: (saleId, items, reason) => ipcRenderer.invoke('sales:return', { saleId, items, reason }),
-    getDailySummary: (date) => ipcRenderer.invoke('sales:getDailySummary', date)
+    getDailySummary: (date) => ipcRenderer.invoke('sales:getDailySummary', date),
+    getAnalytics: (params) => ipcRenderer.invoke('sales:getAnalytics', params),
+    getPaymentBreakdown: (params) => ipcRenderer.invoke('sales:getPaymentBreakdown', params),
+    getHourlyPattern: (params) => ipcRenderer.invoke('sales:getHourlyPattern', params),
+    getCashierPerformance: (params) => ipcRenderer.invoke('sales:getCashierPerformance', params),
+    getTopCustomers: (params) => ipcRenderer.invoke('sales:getTopCustomers', params)
   },
 
   // Inventory
@@ -161,6 +166,17 @@ customers: {
     validate: () => ipcRenderer.invoke('license:validate'),
     deactivate: () => ipcRenderer.invoke('license:deactivate')
   },
+// Add this inside the existing window.api object
+invoices: {
+  getAll: (filters) => ipcRenderer.invoke('invoices:getAll', filters),
+  getById: (id) => ipcRenderer.invoke('invoices:getById', id),
+  create: (invoice) => ipcRenderer.invoke('invoices:create', invoice),
+  update: (id, updates) => ipcRenderer.invoke('invoices:update', { id, updates }),
+  delete: (id) => ipcRenderer.invoke('invoices:delete', id),
+  generateNumber: () => ipcRenderer.invoke('invoices:generateNumber'),
+  generatePDF: (invoiceData) => ipcRenderer.invoke('invoices:generatePDF', invoiceData),
+  sendEmail: (invoiceId) => ipcRenderer.invoke('invoices:sendEmail', invoiceId),
+},
 
   // File operations
   file: {

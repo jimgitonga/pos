@@ -43,6 +43,7 @@
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.303.0",
     "node-machine-id": "^1.1.12",
+    "pdfkit": "^0.17.1",
     "qrcode": "^1.5.3",
     "react": "^18.2.0",
     "react-barcode-reader": "^0.0.2",

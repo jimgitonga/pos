@@ -1,3 +1,4 @@
+
 const { v4: uuidv4 } = require('uuid');
 
 function setupSalesHandlers(ipcMain, db) {
@@ -171,30 +172,7 @@ function setupSalesHandlers(ipcMain, db) {
         );
         
         // Get complete sale data for receipt
-    //     const sale = db.prepare(`
-    //       SELECT s.*, c.first_name, c.last_name, c.phone, u.full_name as cashier_name
-    //       FROM sales s
-    //       LEFT JOIN customers c ON s.customer_id = c.id
-    //       LEFT JOIN users u ON s.user_id = u.id
-    //       WHERE s.id = ?
-    //     `).get(saleId);
-        
-    //     const saleItems = db.prepare(`
-    //       SELECT si.*, p.name as product_name, p.sku
-    //       FROM sale_items si
-    //       JOIN products p ON si.product_id = p.id
-    //       WHERE si.sale_id = ?
-    //     `).all(saleId);
-        
-    //     sale.items = saleItems;
-    //     sale.change_amount = amount_paid - totalAmount;
-        
-    //     return { success: true, sale };
-    //   } catch (error) {
-    //     throw error;
-    //   }
-    // });
-            const sale = db.prepare(`
+        const sale = db.prepare(`
           SELECT s.*, c.first_name, c.last_name, c.phone, u.full_name as cashier_name
           FROM sales s
           LEFT JOIN customers c ON s.customer_id = c.id
@@ -210,14 +188,16 @@ function setupSalesHandlers(ipcMain, db) {
         `).all(saleId);
         
         sale.items = saleItems;
-        
-        // --- ADD THESE TWO LINES ---
-        // Ensure amount_paid is part of the returned sale object
         sale.amount_paid = saleData.amount_paid;
-              
-        // Ensure the change property name matches the frontend expectation (change_due)
         sale.change_due = amount_paid - totalAmount; 
-        // --- END ADDITIONS ---
+        
+        // TRIGGER IMMEDIATE REFRESH OF SIDEBAR STATS
+        if (global.mainWindow) {
+          global.mainWindow.webContents.executeJavaScript(`
+            if (window.refreshSalesStats) window.refreshSalesStats();
+          `);
+        }
+        
         return { success: true, sale };
       } catch (error) {
         throw error;
@@ -393,6 +373,13 @@ function setupSalesHandlers(ipcMain, db) {
           `Voided sale ${sale.invoice_number}: ${reason}`
         );
         
+        // TRIGGER IMMEDIATE REFRESH AFTER VOID
+        if (global.mainWindow) {
+          global.mainWindow.webContents.executeJavaScript(`
+            if (window.refreshSalesStats) window.refreshSalesStats();
+          `);
+        }
+        
         return { success: true };
       } catch (error) {
         throw error;
@@ -491,6 +478,13 @@ function setupSalesHandlers(ipcMain, db) {
           `Processed return ${returnInvoice} - Amount: ${returnTotal}`
         );
         
+        // TRIGGER IMMEDIATE REFRESH AFTER RETURN
+        if (global.mainWindow) {
+          global.mainWindow.webContents.executeJavaScript(`
+            if (window.refreshSalesStats) window.refreshSalesStats();
+          `);
+        }
+        
         return { success: true, returnInvoice, returnTotal };
       } catch (error) {
         throw error;
@@ -502,6 +496,294 @@ function setupSalesHandlers(ipcMain, db) {
     } catch (error) {
       console.error('Process return error:', error);
       return { success: false, error: error.message || 'Failed to process return' };
+    }
+  });
+
+  // Add these handlers to your existing sales.js file after the existing handlers
+
+  // Get detailed sales analytics with profit calculation
+  ipcMain.handle('sales:getAnalytics', async (event, { startDate, endDate, groupBy = 'day' }) => {
+    try {
+      // Get sales with cost information for profit calculation
+      const salesQuery = `
+        SELECT 
+          s.*,
+          si.product_id,
+          si.quantity,
+          si.unit_price,
+          si.total_price as item_total,
+          p.cost_price,
+          p.name as product_name,
+          (si.quantity * COALESCE(p.cost_price, 0)) as item_cost,
+          DATE(s.created_at) as sale_date,
+          strftime('%Y-%m', s.created_at) as sale_month,
+          strftime('%Y', s.created_at) as sale_year,
+          strftime('%W', s.created_at) as sale_week
+        FROM sales s
+        JOIN sale_items si ON s.id = si.sale_id
+        JOIN products p ON si.product_id = p.id
+        WHERE s.payment_status != 'refunded'
+        ${startDate ? 'AND DATE(s.created_at) >= ?' : ''}
+        ${endDate ? 'AND DATE(s.created_at) <= ?' : ''}
+        ORDER BY s.created_at
+      `;
+      
+      const params = [];
+      if (startDate) params.push(startDate);
+      if (endDate) params.push(endDate);
+      
+      const salesData = db.prepare(salesQuery).all(...params);
+      
+      // Group sales by specified period
+      const groupedSales = {};
+      const productPerformance = {};
+      let totalRevenue = 0;
+      let totalCost = 0;
+      const uniqueTransactions = new Set();
+      
+      salesData.forEach(sale => {
+        let groupKey;
+        switch (groupBy) {
+          case 'day':
+            groupKey = sale.sale_date;
+            break;
+          case 'week':
+            groupKey = `${sale.sale_year}-W${sale.sale_week}`;
+            break;
+          case 'month':
+            groupKey = sale.sale_month;
+            break;
+          case 'year':
+            groupKey = sale.sale_year;
+            break;
+          default:
+            groupKey = sale.sale_date;
+        }
+        
+        if (!groupedSales[groupKey]) {
+          groupedSales[groupKey] = {
+            period: groupKey,
+            revenue: 0,
+            cost: 0,
+            profit: 0,
+            transactions: new Set()
+          };
+        }
+        
+        groupedSales[groupKey].revenue += sale.item_total;
+        groupedSales[groupKey].cost += sale.item_cost;
+        groupedSales[groupKey].transactions.add(sale.id);
+        
+        // Track product performance
+        if (!productPerformance[sale.product_id]) {
+          productPerformance[sale.product_id] = {
+            product_name: sale.product_name,
+            quantity_sold: 0,
+            revenue: 0,
+            cost: 0,
+            profit: 0
+          };
+        }
+        
+        productPerformance[sale.product_id].quantity_sold += sale.quantity;
+        productPerformance[sale.product_id].revenue += sale.item_total;
+        productPerformance[sale.product_id].cost += sale.item_cost;
+        
+        totalRevenue += sale.item_total;
+        totalCost += sale.item_cost;
+        uniqueTransactions.add(sale.id);
+      });
+      
+      // Calculate profits and transaction counts
+      Object.values(groupedSales).forEach(group => {
+        group.profit = group.revenue - group.cost;
+        group.transaction_count = group.transactions.size;
+        group.transactions = undefined; // Remove the Set object
+      });
+      
+      Object.values(productPerformance).forEach(product => {
+        product.profit = product.revenue - product.cost;
+        product.profit_margin = product.revenue > 0 ? (product.profit / product.revenue) * 100 : 0;
+      });
+      
+      const totalTransactions = uniqueTransactions.size;
+      const totalProfit = totalRevenue - totalCost;
+      const averageOrderValue = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
+      const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+      
+      // Sort product performance by profit
+      const topProducts = Object.values(productPerformance)
+        .sort((a, b) => b.profit - a.profit)
+        .slice(0, 10);
+      
+      // Convert grouped sales to array and sort
+      const timeSeriesData = Object.values(groupedSales)
+        .sort((a, b) => a.period.localeCompare(b.period));
+      
+      return {
+        success: true,
+        analytics: {
+          summary: {
+            totalRevenue,
+            totalCost,
+            totalProfit,
+            totalTransactions,
+            averageOrderValue,
+            profitMargin
+          },
+          timeSeriesData,
+          topProducts,
+          period: groupBy
+        }
+      };
+    } catch (error) {
+      console.error('Get sales analytics error:', error);
+      return { success: false, error: 'Failed to get sales analytics' };
+    }
+  });
+
+  // Get payment method breakdown
+  ipcMain.handle('sales:getPaymentBreakdown', async (event, { startDate, endDate }) => {
+    try {
+      const query = `
+        SELECT 
+          p.payment_method,
+          COUNT(DISTINCT s.id) as transaction_count,
+          SUM(p.amount) as total_amount,
+          AVG(p.amount) as average_amount
+        FROM payments p
+        JOIN sales s ON p.sale_id = s.id
+        WHERE s.payment_status != 'refunded'
+        ${startDate ? 'AND DATE(s.created_at) >= ?' : ''}
+        ${endDate ? 'AND DATE(s.created_at) <= ?' : ''}
+        GROUP BY p.payment_method
+        ORDER BY total_amount DESC
+      `;
+      
+      const params = [];
+      if (startDate) params.push(startDate);
+      if (endDate) params.push(endDate);
+      
+      const breakdown = db.prepare(query).all(...params);
+      
+      return { success: true, breakdown };
+    } catch (error) {
+      console.error('Get payment breakdown error:', error);
+      return { success: false, error: 'Failed to get payment breakdown' };
+    }
+  });
+
+  // Get hourly sales pattern
+  ipcMain.handle('sales:getHourlyPattern', async (event, { date }) => {
+    try {
+      const query = `
+        SELECT 
+          strftime('%H', created_at) as hour,
+          COUNT(*) as transactions,
+          SUM(total_amount) as revenue,
+          AVG(total_amount) as average_sale
+        FROM sales
+        WHERE DATE(created_at) = ? AND payment_status != 'refunded'
+        GROUP BY hour
+        ORDER BY hour
+      `;
+      
+      const pattern = db.prepare(query).all(date);
+      
+      // Fill in missing hours with zero values
+      const completePattern = [];
+      for (let hour = 0; hour < 24; hour++) {
+        const hourStr = hour.toString().padStart(2, '0');
+        const existingData = pattern.find(p => p.hour === hourStr);
+        
+        completePattern.push({
+          hour: hourStr,
+          transactions: existingData ? existingData.transactions : 0,
+          revenue: existingData ? existingData.revenue : 0,
+          average_sale: existingData ? existingData.average_sale : 0
+        });
+      }
+      
+      return { success: true, pattern: completePattern };
+    } catch (error) {
+      console.error('Get hourly pattern error:', error);
+      return { success: false, error: 'Failed to get hourly pattern' };
+    }
+  });
+
+  // Get cashier performance
+  ipcMain.handle('sales:getCashierPerformance', async (event, { startDate, endDate }) => {
+    try {
+      const query = `
+        SELECT 
+          u.id,
+          u.full_name,
+          u.role,
+          COUNT(s.id) as total_sales,
+          SUM(s.total_amount) as total_revenue,
+          AVG(s.total_amount) as average_sale,
+          SUM(CASE WHEN s.payment_status = 'refunded' THEN 1 ELSE 0 END) as voided_sales,
+          MIN(s.created_at) as first_sale,
+          MAX(s.created_at) as last_sale
+        FROM users u
+        LEFT JOIN sales s ON u.id = s.user_id 
+          AND s.payment_status != 'refunded'
+          ${startDate ? 'AND DATE(s.created_at) >= ?' : ''}
+          ${endDate ? 'AND DATE(s.created_at) <= ?' : ''}
+        WHERE u.role IN ('cashier', 'manager', 'admin')
+        GROUP BY u.id
+        ORDER BY total_revenue DESC
+      `;
+      
+      const params = [];
+      if (startDate) params.push(startDate);
+      if (endDate) params.push(endDate);
+      
+      const performance = db.prepare(query).all(...params);
+      
+      return { success: true, performance };
+    } catch (error) {
+      console.error('Get cashier performance error:', error);
+      return { success: false, error: 'Failed to get cashier performance' };
+    }
+  });
+
+  // Get top customers by revenue
+  ipcMain.handle('sales:getTopCustomers', async (event, { startDate, endDate, limit = 10 }) => {
+    try {
+      const query = `
+        SELECT 
+          c.id,
+          c.first_name,
+          c.last_name,
+          c.email,
+          c.phone,
+          COUNT(s.id) as total_orders,
+          SUM(s.total_amount) as total_spent,
+          AVG(s.total_amount) as average_order,
+          MAX(s.created_at) as last_order_date,
+          c.loyalty_points
+        FROM customers c
+        JOIN sales s ON c.id = s.customer_id
+        WHERE s.payment_status != 'refunded'
+        ${startDate ? 'AND DATE(s.created_at) >= ?' : ''}
+        ${endDate ? 'AND DATE(s.created_at) <= ?' : ''}
+        GROUP BY c.id
+        ORDER BY total_spent DESC
+        LIMIT ?
+      `;
+      
+      const params = [];
+      if (startDate) params.push(startDate);
+      if (endDate) params.push(endDate);
+      params.push(limit);
+      
+      const customers = db.prepare(query).all(...params);
+      
+      return { success: true, customers };
+    } catch (error) {
+      console.error('Get top customers error:', error);
+      return { success: false, error: 'Failed to get top customers' };
     }
   });
 

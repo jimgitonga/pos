@@ -120,11 +120,118 @@ function setupReportsHandlers(ipcMain, db) {
   });
 
   // Inventory Report
-  ipcMain.handle("reports:getInventoryReport", async (event, params) => {
-    try {
-      const stockLevels = db
-        .prepare(
-          `
+//   ipcMain.handle("reports:getInventoryReport", async (event, params) => {
+//     try {
+//       const stockLevels = db
+//         .prepare(
+//           `
+//         SELECT 
+//           p.sku,
+//           p.name,
+//           c.name as category,
+//           i.quantity as current_stock,
+//           p.low_stock_threshold,
+//           p.unit_price,
+//           p.cost_price,
+//           (i.quantity * COALESCE(p.cost_price, p.unit_price * 0.7)) as stock_value,
+//           CASE 
+//             WHEN i.quantity = 0 THEN 'Out of Stock'
+//             WHEN i.quantity <= p.low_stock_threshold THEN 'Low Stock'
+//             ELSE 'In Stock'
+//           END as status
+//         FROM products p
+//         JOIN inventory i ON p.id = i.product_id
+//         LEFT JOIN categories c ON p.category_id = c.id
+//         WHERE p.is_active = 1 AND p.track_inventory = 1
+//         ORDER BY i.quantity ASC
+//       `
+//         )
+//         .all();
+
+//       const movements = db
+//         .prepare(
+//           `
+//         SELECT 
+//           DATE(sm.created_at) as date,
+//           p.name as product,
+//           sm.movement_type,
+//           sm.quantity,
+//           sm.reason,
+//           u.full_name as user
+//         FROM stock_movements sm
+//         JOIN products p ON sm.product_id = p.id
+//         JOIN users u ON sm.user_id = u.id
+//         WHERE sm.created_at >= date('now', '-30 days')
+//         ORDER BY sm.created_at DESC
+//         LIMIT 100
+//       `
+//         )
+//         .all();
+
+//       const summary = db
+//         .prepare(
+//           `
+//         SELECT 
+//           COUNT(DISTINCT p.id) as total_products,
+//           SUM(i.quantity) as total_units,
+//           SUM(i.quantity * COALESCE(p.cost_price, p.unit_price * 0.7)) as total_value,
+//           COUNT(CASE WHEN i.quantity = 0 THEN 1 END) as out_of_stock,
+//           COUNT(CASE WHEN i.quantity > 0 AND i.quantity <= p.low_stock_threshold THEN 1 END) as low_stock
+//         FROM products p
+//         JOIN inventory i ON p.id = i.product_id
+//         WHERE p.is_active = 1 AND p.track_inventory = 1
+//       `
+//         )
+//         .get();
+// console.log("summary is>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ",summary);
+//       return {
+//         success: true,
+//         data: {
+//           stockLevels,
+//           movements,
+//           summary,
+//         },
+//       };
+//     } catch (error) {
+//       console.error("Get inventory report error:", error);
+//       return { success: false, error: "Failed to generate inventory report" };
+//     }
+//   });
+
+
+
+
+// Updated getInventoryReport handler in reports.js
+ipcMain.handle("reports:getInventoryReport", async (event, params) => {
+  try {
+    // Extract pagination parameters with defaults
+    const { 
+      stockPage = 1, 
+      stockLimit = 10,
+      movementsPage = 1,
+      movementsLimit = 10 
+    } = params || {};
+
+    // Calculate offsets
+    const stockOffset = (stockPage - 1) * stockLimit;
+    const movementsOffset = (movementsPage - 1) * movementsLimit;
+
+    // Get total count for stock levels
+    const stockCount = db
+      .prepare(
+        `
+        SELECT COUNT(*) as total
+        FROM products p
+        JOIN inventory i ON p.id = i.product_id
+        WHERE p.is_active = 1 AND p.track_inventory = 1
+      `
+      )
+      .get();
+
+    // Get paginated stock levels
+    const stockLevels = db
+      .prepare(
+        `
         SELECT 
           p.sku,
           p.name,
@@ -144,13 +251,26 @@ function setupReportsHandlers(ipcMain, db) {
         LEFT JOIN categories c ON p.category_id = c.id
         WHERE p.is_active = 1 AND p.track_inventory = 1
         ORDER BY i.quantity ASC
+        LIMIT ? OFFSET ?
       `
-        )
-        .all();
+      )
+      .all(stockLimit, stockOffset);
 
-      const movements = db
-        .prepare(
-          `
+    // Get total count for movements
+    const movementsCount = db
+      .prepare(
+        `
+        SELECT COUNT(*) as total
+        FROM stock_movements sm
+        WHERE sm.created_at >= date('now', '-30 days')
+      `
+      )
+      .get();
+
+    // Get paginated movements
+    const movements = db
+      .prepare(
+        `
         SELECT 
           DATE(sm.created_at) as date,
           p.name as product,
@@ -163,14 +283,14 @@ function setupReportsHandlers(ipcMain, db) {
         JOIN users u ON sm.user_id = u.id
         WHERE sm.created_at >= date('now', '-30 days')
         ORDER BY sm.created_at DESC
-        LIMIT 100
+        LIMIT ? OFFSET ?
       `
-        )
-        .all();
+      )
+      .all(movementsLimit, movementsOffset);
 
-      const summary = db
-        .prepare(
-          `
+    const summary = db
+      .prepare(
+        `
         SELECT 
           COUNT(DISTINCT p.id) as total_products,
           SUM(i.quantity) as total_units,
@@ -181,22 +301,37 @@ function setupReportsHandlers(ipcMain, db) {
         JOIN inventory i ON p.id = i.product_id
         WHERE p.is_active = 1 AND p.track_inventory = 1
       `
-        )
-        .get();
+      )
+      .get();
 
-      return {
-        success: true,
-        data: {
-          stockLevels,
-          movements,
-          summary,
+    console.log("summary is>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ", summary);
+
+    return {
+      success: true,
+      data: {
+        stockLevels,
+        stockPagination: {
+          page: stockPage,
+          limit: stockLimit,
+          total: stockCount.total,
+          totalPages: Math.ceil(stockCount.total / stockLimit)
         },
-      };
-    } catch (error) {
-      console.error("Get inventory report error:", error);
-      return { success: false, error: "Failed to generate inventory report" };
-    }
-  });
+        movements,
+        movementsPagination: {
+          page: movementsPage,
+          limit: movementsLimit,
+          total: movementsCount.total,
+          totalPages: Math.ceil(movementsCount.total / movementsLimit)
+        },
+        summary,
+      },
+    };
+  } catch (error) {
+    console.error("Get inventory report error:", error);
+    return { success: false, error: "Failed to generate inventory report" };
+  }
+});
+
 
   // Add this handler to your reports.js file in the setupReportsHandlers function
 
