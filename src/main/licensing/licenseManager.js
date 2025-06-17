@@ -854,7 +854,7 @@ class LicenseManager {
   // Force shutdown with anti-tampering
   async forceShutdown(reason) {
     await this.initializeStore();
-    const storedLicense = this.store.get("license");
+    const storedLicense = await this.store.get("license");
 
     if (storedLicense) {
       const isExpired = this.isLicenseExpired(storedLicense.expiresAt);
