@@ -3,29 +3,66 @@
 @tailwind utilities;
 
 @layer base {
+  /* Ensure full viewport coverage */
+  html, body {
+    @apply h-full w-full overflow-hidden;
+  }
+  
   body {
     @apply bg-gray-900 text-white;
+  }
+  
+  /* Prevent iOS bounce scrolling */
+  body {
+    position: fixed;
+    overflow: hidden;
+  }
+  
+  /* Root element should fill the viewport */
+  #root {
+    @apply h-full w-full overflow-hidden;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors;
+    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 px-3 sm:py-2 sm:px-4 rounded-lg transition-colors text-sm sm:text-base;
   }
   
   .btn-secondary {
-    @apply bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg transition-colors;
+    @apply bg-gray-700 hover:bg-gray-600 text-white font-medium py-1.5 px-3 sm:py-2 sm:px-4 rounded-lg transition-colors text-sm sm:text-base;
   }
   
   .input-field {
-    @apply bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500;
+    @apply bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm sm:text-base;
+  }
+  
+  /* Responsive text utilities */
+  .text-responsive-xs {
+    @apply text-xs sm:text-sm;
+  }
+  
+  .text-responsive-sm {
+    @apply text-sm sm:text-base;
+  }
+  
+  .text-responsive-base {
+    @apply text-base sm:text-lg;
+  }
+  
+  .text-responsive-lg {
+    @apply text-lg sm:text-xl;
+  }
+  
+  .text-responsive-xl {
+    @apply text-xl sm:text-2xl;
   }
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - make it smaller on mobile */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  @apply w-1 sm:w-2;
+  @apply h-1 sm:h-2;
 }
 
 ::-webkit-scrollbar-track {
@@ -38,4 +75,58 @@
 
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-gray-500;
+}
+
+/* Ensure modals and overlays work properly */
+.modal-overlay {
+  @apply fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4;
+}
+
+.modal-content {
+  @apply bg-gray-800 rounded-lg shadow-xl max-w-full max-h-[90vh] overflow-auto;
+}
+
+/* Responsive padding utilities */
+.p-responsive {
+  @apply p-2 sm:p-4 md:p-6;
+}
+
+.px-responsive {
+  @apply px-2 sm:px-4 md:px-6;
+}
+
+.py-responsive {
+  @apply py-2 sm:py-4 md:py-6;
+}
+
+/* Responsive grid utilities */
+.grid-responsive {
+  @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-4;
+}
+
+/* Prevent text selection on UI elements */
+.no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Ensure proper touch targets on mobile */
+@media (max-width: 768px) {
+  button, a, .clickable {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Fix for viewport units on mobile browsers */
+.h-screen-safe {
+  height: 100vh;
+  height: -webkit-fill-available;
+}
+
+.min-h-screen-safe {
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
 }

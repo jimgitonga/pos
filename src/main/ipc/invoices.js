@@ -743,7 +743,6 @@
 // module.exports = { setupInvoiceHandlers };
 
 // src/main/ipc/invoices.js
-const { dialog } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const PDFDocument = require('pdfkit');

@@ -1,5 +1,4 @@
 
-const { v4: uuidv4 } = require('uuid');
 
 function setupSalesHandlers(ipcMain, db) {
   // Create new sale transaction
